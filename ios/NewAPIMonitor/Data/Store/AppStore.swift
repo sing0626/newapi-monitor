@@ -73,14 +73,16 @@ final class AppStore: ObservableObject {
 
     private var document = StoreDocument()
     private let fileURL: URL
+    private let keychain: KeychainStore.Client
     private var refreshTask: Task<Void, Never>?
     private var refreshID = UUID()
     private var cancellers: [UUID: () -> Void] = [:]
     private var hasStoredDocument = false
 
-    init(fileURL: URL? = nil) {
+    init(fileURL: URL? = nil, keychain: KeychainStore.Client = .live) {
         self.fileURL = fileURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("NewAPIMonitor", isDirectory: true).appendingPathComponent("metadata-v1.json")
+        self.keychain = keychain
         reload()
     }
 
@@ -142,7 +144,7 @@ final class AppStore: ObservableObject {
             guard candidate.version == 1 else { throw StoreFailure(message: "本機資料版本不受支援") }
             var hydrated: [Instance] = []
             for metadata in candidate.instances {
-                let pair = try KeychainStore.loadCredentials(for: metadata.id)
+                let pair = try KeychainStore.loadCredentials(for: metadata.id, using: keychain)
                 hydrated.append(try Self.validated(metadata.hydrate(pair)))
             }
             try validateDocument(candidate, instances: hydrated)
@@ -263,14 +265,14 @@ final class AppStore: ObservableObject {
             return a?.accessToken != b?.accessToken || a?.apiKey != b?.apiKey
         }.sorted()
         var originals: [String: KeychainStore.SecretPair] = [:]
-        for id in changed { if let pair = try KeychainStore.loadCredentials(for: id) { originals[id] = pair } }
+        for id in changed { if let pair = try KeychainStore.loadCredentials(for: id, using: keychain) { originals[id] = pair } }
         var touched: [String] = []
         do {
             for id in changed {
                 touched.append(id)
                 if let value = newByID[id] {
-                    try KeychainStore.saveCredentials(for: id, accessToken: value.accessToken, apiKey: value.apiKey)
-                } else { try KeychainStore.deleteCredentials(for: id) }
+                    try KeychainStore.saveCredentials(for: id, accessToken: value.accessToken, apiKey: value.apiKey, using: keychain)
+                } else { try KeychainStore.deleteCredentials(for: id, using: keychain) }
             }
             try persist(next)
         } catch {
@@ -278,8 +280,8 @@ final class AppStore: ObservableObject {
             for id in touched.reversed() {
                 do {
                     if let pair = originals[id] {
-                        try KeychainStore.saveCredentials(for: id, accessToken: pair.accessToken, apiKey: pair.apiKey)
-                    } else { try KeychainStore.deleteCredentials(for: id) }
+                        try KeychainStore.saveCredentials(for: id, accessToken: pair.accessToken, apiKey: pair.apiKey, using: keychain)
+                    } else { try KeychainStore.deleteCredentials(for: id, using: keychain) }
                 } catch { rollbackFailed = true }
             }
             if rollbackFailed {

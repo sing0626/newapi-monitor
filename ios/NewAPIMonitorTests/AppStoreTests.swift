@@ -1,8 +1,39 @@
 import XCTest
+import Security
 @testable import NewAPIMonitor
 
 @MainActor
 final class AppStoreTests: XCTestCase {
+    private static func memoryKeychain() -> KeychainStore.Client {
+        var storage: [String: Data] = [:]
+        return KeychainStore.Client(
+            update: { query, attrs in
+                let acct = query[kSecAttrAccount as String] as! String
+                guard storage[acct] != nil else { return errSecItemNotFound }
+                storage[acct] = attrs[kSecValueData as String] as? Data
+                return errSecSuccess
+            },
+            add: { query in
+                let acct = query[kSecAttrAccount as String] as! String
+                storage[acct] = query[kSecValueData as String] as? Data
+                return errSecSuccess
+            },
+            copy: { query in
+                let acct = query[kSecAttrAccount as String] as! String
+                guard let data = storage[acct] else { return (errSecItemNotFound, nil) }
+                return (errSecSuccess, data)
+            },
+            delete: { query in
+                if let acct = query[kSecAttrAccount as String] as? String {
+                    storage.removeValue(forKey: acct)
+                } else {
+                    storage.removeAll()
+                }
+                return errSecSuccess
+            }
+        )
+    }
+
     func testHTTPSNormalizationPreservesCaseSensitivePath() throws {
         let normalized = try AppStore.normalizedURL("HTTPS://Example.COM:443/SubPath/v1/")
         XCTAssertEqual(normalized, "https://example.com/SubPath/v1")
@@ -30,11 +61,11 @@ final class AppStoreTests: XCTestCase {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let file = dir.appendingPathComponent("metadata-v1.json")
-        let store = AppStore(fileURL: file)
+        let store = AppStore(fileURL: file, keychain: Self.memoryKeychain())
         store.setLifecycle(active: true, protected: true)
 
         try store.saveInstance(
-            Instance(id: "", name: "Prod", baseUrl: "https://api.example.com/Gateway", accessToken: "", apiKey: "",
+            Instance(id: "", name: "Prod", baseUrl: "https://api.example.com/Gateway", accessToken: "local-tok", apiKey: "sk-local",
                      quotaPerUnit: 500_000, authStyle: nil, authStyleKey: nil, createdAt: 1),
             budget: 25,
             pinned: false,
@@ -63,6 +94,8 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(preview.newCount, 0)
         try store.confirmImport(preview)
         XCTAssertEqual(store.instances.count, 1)
+        XCTAssertEqual(store.instances[0].accessToken, "local-tok")
+        XCTAssertEqual(store.instances[0].apiKey, "sk-local")
         XCTAssertEqual(store.budgets[store.instances[0].id], 80)
         XCTAssertEqual(store.appearance.mode, "oled")
         XCTAssertEqual(store.appearance.accent, "blue")

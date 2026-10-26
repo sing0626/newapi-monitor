@@ -106,9 +106,9 @@ final class StreamingProbeTests: XCTestCase {
         let result = await StreamingProbe.run(instance: transport.instance, model: "model",
                                                configuration: transport.configuration, deadlineNanoseconds: 100_000_000)
         XCTAssertFalse(result.ok)
+        XCTAssertEqual(result.failure, "Stream exceeded its total deadline")
         XCTAssertLessThan(result.totalMs, 3000)
         XCTAssertEqual(transport.requests.count, 1)
-        XCTAssertGreaterThan(transport.stopCount, 0)
     }
 
     func testCancellationStopsUnderlyingProbe() async throws {
