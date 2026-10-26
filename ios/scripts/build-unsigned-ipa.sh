@@ -27,7 +27,7 @@ APP="$STAGE/DerivedData/Build/Products/Release-iphoneos/NewAPIMonitor.app"
 [[ -d "$APP" && -f "$APP/Info.plist" ]] || { printf '%s\n' 'Device .app is missing.' >&2; exit 1; }
 EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Info.plist")"
 [[ -f "$APP/$EXECUTABLE" ]] || { printf '%s\n' 'App executable is missing.' >&2; exit 1; }
-xcrun lipo -verify_arch arm64 "$APP/$EXECUTABLE"
+xcrun lipo "$APP/$EXECUTABLE" -verify_arch arm64
 mkdir "$STAGE/Payload"
 ditto "$APP" "$STAGE/Payload/NewAPIMonitor.app"
 ditto -c -k --keepParent "$STAGE/Payload" "$STAGE/NewAPIMonitor-unsigned.ipa"
