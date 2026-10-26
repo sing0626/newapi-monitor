@@ -36,6 +36,7 @@ private struct StoreDocument: Codable {
     var rules: [String: InstanceAlertRule] = [:]
     var history: [AlertRecord] = []
     var alertStates: [String: AlertEngine.State] = [:]
+    var snapshots: [String: MonitorSnapshot]? = nil
 }
 
 struct StoreFailure: LocalizedError {
@@ -111,17 +112,24 @@ final class AppStore: ObservableObject {
     }
     func unregisterCancellation(_ id: UUID?) { if let id { cancellers.removeValue(forKey: id) } }
 
-    func invalidate() {
+    func invalidate(clearSnapshots: Bool = false) {
         generation = UUID()
         refreshTask?.cancel(); refreshTask = nil; refreshID = UUID(); refreshing = false
         for cancel in Array(cancellers.values) { cancel() }
-        snapshots = [:]; failures = [:]
+        if clearSnapshots {
+            snapshots = [:]
+        }
+        failures = [:]
     }
 
     func setLifecycle(active: Bool, protected: Bool) {
         guard active != isForeground || protected != isProtectedDataAvailable else { return }
+        let becameProtectedAndActive = (!isProtectedDataAvailable && protected) || (loadFailure != nil && active && protected)
         isForeground = active; isProtectedDataAvailable = protected
-        invalidate()
+        invalidate(clearSnapshots: false)
+        if becameProtectedAndActive {
+            reload()
+        }
     }
 
     func stopHomeRefresh() {
@@ -129,7 +137,7 @@ final class AppStore: ObservableObject {
     }
 
     func reload() {
-        invalidate()
+        invalidate(clearSnapshots: false)
         do {
             let candidate: StoreDocument
             if FileManager.default.fileExists(atPath: fileURL.path) {
@@ -137,6 +145,11 @@ final class AppStore: ObservableObject {
                 guard data.count <= 8 * 1024 * 1024 else { throw StoreFailure(message: "本機資料過大") }
                 candidate = try JSONDecoder().decode(StoreDocument.self, from: data)
                 hasStoredDocument = true
+            } else if let mirrorData = KeychainStore.loadMetadataMirror(using: keychain),
+                      mirrorData.count <= 8 * 1024 * 1024,
+                      let recovered = try? JSONDecoder().decode(StoreDocument.self, from: mirrorData) {
+                candidate = recovered
+                try? persist(recovered)
             } else {
                 guard !hasStoredDocument else { throw StoreFailure(message: "本機資料檔已遺失") }
                 candidate = StoreDocument()
@@ -242,7 +255,8 @@ final class AppStore: ObservableObject {
         var flags = URLResourceValues(); flags.isExcludedFromBackup = true
         try directoryURL.setResourceValues(flags)
         let data = try JSONEncoder().encode(doc)
-        try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+        try data.write(to: fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        KeychainStore.saveMetadataMirror(data, using: keychain)
         hasStoredDocument = true
     }
 
@@ -250,6 +264,10 @@ final class AppStore: ObservableObject {
         instances = values; settings = doc.settings; appearance = doc.appearance
         preferences = doc.preferences; budgets = doc.budgets; alerts = doc.alerts
         history = Array(doc.history.prefix(200))
+        if let savedSnapshots = doc.snapshots {
+            let validIDs = Set(values.map(\.id))
+            snapshots = savedSnapshots.filter { validIDs.contains($0.key) }
+        }
     }
 
     /// Keychain + file cannot share a transaction. Snapshot affected secrets, roll back on any failure,
@@ -314,10 +332,12 @@ final class AppStore: ObservableObject {
         var next = document; next.instances = values.map(StoredInstance.init)
         next.budgets.removeValue(forKey: id); next.rules.removeValue(forKey: id)
         next.alertStates.removeValue(forKey: id)
+        next.snapshots?.removeValue(forKey: id)
         next.history.removeAll { $0.sourceId == id }
         next.preferences.pinned.remove(id); next.preferences.excluded.remove(id)
         next.preferences.order.removeAll { $0 == id }
         if next.settings.activeId == id { next.settings.activeId = values.first?.id }
+        snapshots.removeValue(forKey: id)
         try commit(next, instances: values)
     }
 
@@ -474,7 +494,12 @@ final class AppStore: ObservableObject {
                             guard !Task.isCancelled, self.generation == token, self.refreshID == request, self.canRefreshHome else {
                                 group.cancelAll(); continue
                             }
-                            self.snapshots[id] = snapshot; self.failures[id] = failure
+                            if let snapshot {
+                                self.snapshots[id] = snapshot
+                                self.document.snapshots = self.snapshots
+                                try? self.persist(self.document)
+                            }
+                            self.failures[id] = failure
                             if let snapshot, let instance = batch.first(where: { $0.id == id }) {
                                 self.evaluateAlerts(instance: instance, snapshot: snapshot)
                             }

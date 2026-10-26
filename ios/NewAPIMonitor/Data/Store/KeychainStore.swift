@@ -2,7 +2,9 @@ import Foundation
 import Security
 
 enum KeychainStore {
-    private static let service = "com.singnewapimonitor.ios.credentials"
+    static let service = "com.singnewapimonitor.ios.credentials"
+    static let legacyService = "com.newapimonitor.ios.credentials"
+    private static let metadataAccount = "__app_store_metadata_v1__"
 
     enum StoreError: LocalizedError, Equatable {
         case status(OSStatus)
@@ -48,7 +50,53 @@ enum KeychainStore {
     ) throws {
         let pair = SecretPair(accessToken: accessToken, apiKey: apiKey)
         let data = try JSONEncoder().encode(pair)
-        let query = credentialQuery(instanceId)
+        try upsertData(data, account: instanceId, serviceName: service, using: client)
+    }
+
+    static func loadCredentials(for instanceId: String, using client: Client = .live) throws -> SecretPair? {
+        if let data = try loadRawData(account: instanceId, serviceName: service, using: client) {
+            return try JSONDecoder().decode(SecretPair.self, from: data)
+        }
+        // Fallback to legacy bundle ID service ("com.newapimonitor.ios.credentials") and migrate automatically
+        if let legacyData = try loadRawData(account: instanceId, serviceName: legacyService, using: client) {
+            let pair = try JSONDecoder().decode(SecretPair.self, from: legacyData)
+            try? upsertData(legacyData, account: instanceId, serviceName: service, using: client)
+            return pair
+        }
+        return nil
+    }
+
+    static func deleteCredentials(for instanceId: String, using client: Client = .live) throws {
+        let status = client.delete(credentialQuery(instanceId, serviceName: service))
+        if status != errSecItemNotFound { try requireSuccess(status) }
+        _ = client.delete(credentialQuery(instanceId, serviceName: legacyService))
+    }
+
+    static func clearAllCredentials(using client: Client = .live) throws {
+        for svc in [service, legacyService] {
+            let status = client.delete([
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: svc
+            ])
+            if status != errSecItemNotFound { try requireSuccess(status) }
+        }
+    }
+
+    /// Saves a mirror of the non-secret StoreDocument in Keychain so sideload reinstalls
+    /// or container path changes never reset user instances or preferences.
+    static func saveMetadataMirror(_ data: Data, using client: Client = .live) {
+        try? upsertData(data, account: metadataAccount, serviceName: service, using: client)
+    }
+
+    static func loadMetadataMirror(using client: Client = .live) -> Data? {
+        if let data = try? loadRawData(account: metadataAccount, serviceName: service, using: client) {
+            return data
+        }
+        return try? loadRawData(account: metadataAccount, serviceName: legacyService, using: client)
+    }
+
+    private static func upsertData(_ data: Data, account: String, serviceName: String, using client: Client) throws {
+        let query = credentialQuery(account, serviceName: serviceName)
         let attributes: [String: Any] = [
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
@@ -59,7 +107,6 @@ enum KeychainStore {
 
         let addQuery = query.merging(attributes) { _, value in value }
         let addStatus = client.add(addQuery)
-        // A concurrent writer may have inserted the item after our first update.
         if addStatus == errSecDuplicateItem {
             try requireSuccess(client.update(query, attributes))
         } else {
@@ -67,35 +114,21 @@ enum KeychainStore {
         }
     }
 
-    static func loadCredentials(for instanceId: String, using client: Client = .live) throws -> SecretPair? {
-        var query = credentialQuery(instanceId)
+    private static func loadRawData(account: String, serviceName: String, using client: Client) throws -> Data? {
+        var query = credentialQuery(account, serviceName: serviceName)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         let (status, data) = client.copy(query)
         if status == errSecItemNotFound { return nil }
         try requireSuccess(status)
         guard let data else { throw StoreError.invalidData }
-        // Corruption is not absence: callers must not overwrite it with blanks.
-        return try JSONDecoder().decode(SecretPair.self, from: data)
+        return data
     }
 
-    static func deleteCredentials(for instanceId: String, using client: Client = .live) throws {
-        let status = client.delete(credentialQuery(instanceId))
-        if status != errSecItemNotFound { try requireSuccess(status) }
-    }
-
-    static func clearAllCredentials(using client: Client = .live) throws {
-        let status = client.delete([
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service
-        ])
-        if status != errSecItemNotFound { try requireSuccess(status) }
-    }
-
-    private static func credentialQuery(_ instanceId: String) -> [String: Any] {
+    private static func credentialQuery(_ instanceId: String, serviceName: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
+            kSecAttrService as String: serviceName,
             kSecAttrAccount as String: instanceId
         ]
     }

@@ -6,28 +6,36 @@ import Security
 final class AppStoreTests: XCTestCase {
     private static func memoryKeychain() -> KeychainStore.Client {
         var storage: [String: Data] = [:]
+        func key(_ query: [String: Any]) -> String {
+            let svc = (query[kSecAttrService as String] as? String) ?? ""
+            let acct = (query[kSecAttrAccount as String] as? String) ?? ""
+            return "\(svc)|\(acct)"
+        }
         return KeychainStore.Client(
             update: { query, attrs in
-                let acct = query[kSecAttrAccount as String] as! String
-                guard storage[acct] != nil else { return errSecItemNotFound }
-                storage[acct] = attrs[kSecValueData as String] as? Data
+                let k = key(query)
+                guard storage[k] != nil else { return errSecItemNotFound }
+                storage[k] = attrs[kSecValueData as String] as? Data
                 return errSecSuccess
             },
             add: { query in
-                let acct = query[kSecAttrAccount as String] as! String
-                storage[acct] = query[kSecValueData as String] as? Data
+                let k = key(query)
+                storage[k] = query[kSecValueData as String] as? Data
                 return errSecSuccess
             },
             copy: { query in
-                let acct = query[kSecAttrAccount as String] as! String
-                guard let data = storage[acct] else { return (errSecItemNotFound, nil) }
+                let k = key(query)
+                guard let data = storage[k] else { return (errSecItemNotFound, nil) }
                 return (errSecSuccess, data)
             },
             delete: { query in
+                let svc = (query[kSecAttrService as String] as? String) ?? ""
                 if let acct = query[kSecAttrAccount as String] as? String {
-                    storage.removeValue(forKey: acct)
+                    storage.removeValue(forKey: "\(svc)|\(acct)")
                 } else {
-                    storage.removeAll()
+                    for existing in Array(storage.keys) where existing.hasPrefix("\(svc)|") {
+                        storage.removeValue(forKey: existing)
+                    }
                 }
                 return errSecSuccess
             }
@@ -99,5 +107,35 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.budgets[store.instances[0].id], 80)
         XCTAssertEqual(store.appearance.mode, "oled")
         XCTAssertEqual(store.appearance.accent, "blue")
+    }
+
+    func testReinstallOrContainerResetRecoversFromKeychainMirror() throws {
+        let keychain = Self.memoryKeychain()
+        let dir1 = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let dir2 = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: dir1)
+            try? FileManager.default.removeItem(at: dir2)
+        }
+        let file1 = dir1.appendingPathComponent("metadata-v1.json")
+        let store1 = AppStore(fileURL: file1, keychain: keychain)
+        store1.setLifecycle(active: true, protected: true)
+        try store1.saveInstance(
+            Instance(id: "", name: "MySite", baseUrl: "https://api.example.com", accessToken: "tok-persist", apiKey: "sk-persist",
+                     quotaPerUnit: 500_000, authStyle: nil, authStyleKey: nil, createdAt: 100),
+            budget: 42,
+            pinned: true,
+            included: true
+        )
+
+        // Simulate sideload update / new container where metadata-v1.json does not exist yet
+        let file2 = dir2.appendingPathComponent("metadata-v1.json")
+        let store2 = AppStore(fileURL: file2, keychain: keychain)
+        XCTAssertNil(store2.loadFailure)
+        XCTAssertEqual(store2.instances.count, 1)
+        XCTAssertEqual(store2.instances[0].name, "MySite")
+        XCTAssertEqual(store2.instances[0].accessToken, "tok-persist")
+        XCTAssertEqual(store2.instances[0].apiKey, "sk-persist")
+        XCTAssertEqual(store2.budgets[store2.instances[0].id], 42)
     }
 }
