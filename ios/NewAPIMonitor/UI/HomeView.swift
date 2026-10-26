@@ -2,76 +2,69 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.colorScheme) private var systemScheme
     @State private var showAdd = false
     @State private var path: [String] = []
+    private var theme: GlassTheme { GlassTheme(mode: store.appearance.mode, accent: store.appearance.accent, scheme: systemScheme) }
     private var refreshKey: String {
         "\(store.generation)-\(store.selectedTab)-\(store.homeVisible)-\(store.canOperate)-\(path.count)"
     }
     private var included: [Instance] { store.sources.filter { !store.preferences.excluded.contains($0.id) } }
     private var balances: [Double] { included.compactMap { store.snapshots[$0.id]?.balanceUsd } }
+    private var todays: [Double] { store.sources.compactMap { store.snapshots[$0.id]?.todayUsd } }
+    private var months: [Double] { store.sources.compactMap { store.snapshots[$0.id]?.monthUsd } }
 
     var body: some View {
         NavigationStack(path: $path) {
-            List {
-                if store.settings.demo { Section { OfflineBanner() } }
-                if let failure = store.loadFailure {
-                    Section("資料保護") {
-                        InlineError(text: failure)
-                        Button("重新讀取（不會覆蓋原資料）") { store.reload() }
-                    }
-                }
-                Section {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("可用餘額合計").font(.subheadline).foregroundStyle(.secondary)
-                        Text(store.money(balances.isEmpty ? nil : balances.reduce(0, +)))
-                            .font(.largeTitle.bold().monospacedDigit()).minimumScaleFactor(0.6)
-                        Text("\(balances.count)/\(included.count) 個已納入實例有資料 · USD")
-                            .font(.caption).foregroundStyle(.secondary)
-                        Text("部分資料不等於完整總額；排除嘅實例仍會顯示及檢查警報。")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }.padding(.vertical, 8)
-                }
-                Section("實例") {
-                    if store.sources.isEmpty {
-                        ContentUnavailableView("仲未有實例", systemImage: "server.rack", description: Text("加入 HTTPS 站點，或到設定開啟離線示範。"))
-                        Button("加入第一個實例") { showAdd = true }.disabled(store.loadFailure != nil)
-                    }
-                    ForEach(store.sources) { instance in
-                        NavigationLink(value: instance.id) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    if store.preferences.pinned.contains(instance.id) { Image(systemName: "pin.fill").foregroundStyle(.orange) }
-                                    Text(instance.name).font(.headline)
-                                }
-                                let snapshot = store.snapshots[instance.id]
-                                MoneyRow(title: "餘額", value: store.money(snapshot?.balanceUsd))
-                                MoneyRow(title: "今日", value: store.money(snapshot?.todayUsd))
-                                MoneyRow(title: "本月", value: store.money(snapshot?.monthUsd))
-                                if let budget = store.budgets[instance.id] {
-                                    MoneyRow(title: "每月預算", value: store.money(budget))
-                                    if let spent = snapshot?.monthUsd, !store.preferences.hideMoney {
-                                        ProgressView(value: min(max(spent / budget, 0), 1)).accessibilityLabel("預算使用比例")
-                                    }
-                                }
-                                if store.preferences.excluded.contains(instance.id) { Text("不計入餘額合計").font(.caption).foregroundStyle(.secondary) }
-                                InlineError(text: store.failures[instance.id] ?? snapshot?.balanceFailure ?? snapshot?.spendFailure)
-                                Text(snapshot.map { "最近更新：\(Fmt.relativeTime(fromMs: $0.attemptedAt))" } ?? "尚未讀取")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }.padding(.vertical, 6)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if store.settings.demo { OfflineBanner() }
+                    if let failure = store.loadFailure {
+                        GlassCard(theme: theme) {
+                            Text("資料保護").font(.headline).foregroundStyle(theme.text)
+                            InlineError(text: failure)
+                            Button("重新讀取（不會覆蓋原資料）") { store.reload() }
                         }
                     }
-                }
-                Section {
+                    heroCard
+                    quickActions
+                    HStack {
+                        Text("實例").font(.headline).foregroundStyle(theme.text)
+                        Spacer()
+                        Button(store.refreshing ? "更新中…" : "全部刷新") { Task { await store.refreshHome() } }
+                            .font(.caption.bold())
+                            .disabled(!store.canRefreshHome || store.refreshing)
+                    }
+                    if store.sources.isEmpty {
+                        GlassCard(theme: theme) {
+                            Text("仲未有實例").font(.headline).foregroundStyle(theme.text)
+                            Text("加入 HTTPS 站點，或到設定開啟離線示範。").font(.subheadline).foregroundStyle(theme.muted)
+                            Button("加入第一個實例") { showAdd = true }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(store.loadFailure != nil)
+                        }
+                    }
+                    ForEach(store.sources) { instance in
+                        NavigationLink(value: instance.id) { instanceCard(instance) }
+                            .buttonStyle(.plain)
+                    }
                     Text("只喺前景首頁顯示時，每 \(store.settings.intervalSec) 秒刷新；同時最多讀取 3 個實例。唔提供背景監察。")
-                        .font(.footnote).foregroundStyle(.secondary)
+                        .font(.footnote)
+                        .foregroundStyle(theme.muted)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
             }
+            .background(theme.background.ignoresSafeArea())
             .navigationTitle("NewAPI Monitor")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { Task { await store.refreshHome() } } label: {
-                        if store.refreshing { ProgressView() } else { Image(systemName: "arrow.clockwise") }
-                    }.accessibilityLabel("刷新總覽").disabled(!store.canRefreshHome)
+                    HStack(spacing: 8) {
+                        BrandLogo(theme: theme, size: 22)
+                        Button { Task { await store.refreshHome() } } label: {
+                            if store.refreshing { ProgressView() } else { Image(systemName: "arrow.clockwise") }
+                        }.accessibilityLabel("刷新總覽").disabled(!store.canRefreshHome)
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showAdd = true } label: { Image(systemName: "plus") }
@@ -92,6 +85,85 @@ struct HomeView: View {
                 await store.refreshHome()
                 do { try await Task.sleep(for: .seconds(store.settings.intervalSec)) } catch { return }
             }
+        }
+    }
+
+    private var heroCard: some View {
+        GlassCard(theme: theme, padding: 0) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Text("可用餘額合計").font(.subheadline).foregroundStyle(theme.secondaryText)
+                    Spacer()
+                    Text("\(balances.count)/\(included.count) 實例 · USD").font(.caption).foregroundStyle(theme.accent2)
+                }
+                Text(store.money(balances.isEmpty ? nil : balances.reduce(0, +)))
+                    .font(.system(size: 34, weight: .bold).monospacedDigit())
+                    .foregroundStyle(theme.text)
+                    .minimumScaleFactor(0.6)
+                Divider().overlay(theme.stroke)
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("今日消費").font(.caption).foregroundStyle(theme.muted)
+                        Text(store.money(todays.isEmpty ? nil : todays.reduce(0, +))).font(.headline.monospacedDigit()).foregroundStyle(theme.text)
+                    }
+                    Spacer()
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("本月消費").font(.caption).foregroundStyle(theme.muted)
+                        Text(store.money(months.isEmpty ? nil : months.reduce(0, +))).font(.headline.monospacedDigit()).foregroundStyle(theme.text)
+                    }
+                }
+                Text("部分資料不等於完整總額；排除嘅實例仍會顯示及檢查警報。")
+                    .font(.caption2).foregroundStyle(theme.muted)
+            }
+            .padding(20)
+            .background(LinearGradient(colors: [theme.accent1.opacity(0.22), theme.accent2.opacity(0.05)],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing))
+        }
+    }
+
+    private var quickActions: some View {
+        HStack(spacing: 10) {
+            quickButton("消費報表", icon: "chart.bar.xaxis", tab: 1)
+            quickButton("串流測速", icon: "speedometer", tab: 2)
+            quickButton("警報與設定", icon: "bell.badge", tab: 3)
+        }
+    }
+
+    private func quickButton(_ label: String, icon: String, tab: Int) -> some View {
+        Button { store.selectedTab = tab } label: {
+            GlassCard(theme: theme, padding: 12) {
+                VStack(spacing: 8) {
+                    Image(systemName: icon).font(.headline).foregroundStyle(theme.accent1)
+                    Text(label).font(.caption.bold()).foregroundStyle(theme.secondaryText).lineLimit(1)
+                }.frame(maxWidth: .infinity)
+            }
+        }.buttonStyle(.plain)
+    }
+
+    private func instanceCard(_ instance: Instance) -> some View {
+        let snapshot = store.snapshots[instance.id]
+        return GlassCard(theme: theme) {
+            HStack {
+                if store.preferences.pinned.contains(instance.id) { Image(systemName: "pin.fill").foregroundStyle(.orange) }
+                Text(instance.name).font(.headline).foregroundStyle(theme.text)
+                Spacer()
+                Text("詳情 ›").font(.caption.bold()).foregroundStyle(theme.accent1)
+            }
+            MoneyRow(title: "餘額", value: store.money(snapshot?.balanceUsd))
+            MoneyRow(title: "今日", value: store.money(snapshot?.todayUsd))
+            MoneyRow(title: "本月", value: store.money(snapshot?.monthUsd))
+            if let budget = store.budgets[instance.id] {
+                MoneyRow(title: "每月預算", value: store.money(budget))
+                if let spent = snapshot?.monthUsd, !store.preferences.hideMoney {
+                    ProgressView(value: min(max(spent / budget, 0), 1)).accessibilityLabel("預算使用比例")
+                }
+            }
+            if store.preferences.excluded.contains(instance.id) {
+                Text("不計入餘額合計").font(.caption).foregroundStyle(theme.muted)
+            }
+            InlineError(text: store.failures[instance.id] ?? snapshot?.balanceFailure ?? snapshot?.spendFailure)
+            Text(snapshot.map { "最近更新：\(Fmt.relativeTime(fromMs: $0.attemptedAt))" } ?? "尚未讀取")
+                .font(.caption).foregroundStyle(theme.muted)
         }
     }
 }

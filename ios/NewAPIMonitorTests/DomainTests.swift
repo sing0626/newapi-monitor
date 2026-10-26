@@ -138,4 +138,24 @@ final class DomainTests: XCTestCase {
         XCTAssertEqual(Fmt.usd(nil), "—")
         XCTAssertEqual(Fmt.usd(.infinity), "—")
     }
+
+    func testLiquidGlassSnapProjectionClampAndVibrancy() {
+        let w: CGFloat = 233.5
+        XCTAssertEqual(LiquidGlassMath.snapIndex(currentIdx: 0, dragPx: 0.3 * w, velocityX: 0, tabWidth: w, count: 4), 0)
+        XCTAssertEqual(LiquidGlassMath.snapIndex(currentIdx: 0, dragPx: 0.6 * w, velocityX: 0, tabWidth: w, count: 4), 1)
+        XCTAssertEqual(LiquidGlassMath.snapIndex(currentIdx: 0, dragPx: 0.3 * w, velocityX: w / 0.15, tabWidth: w, count: 4), 1)
+        XCTAssertEqual(LiquidGlassMath.snapIndex(currentIdx: 1, dragPx: -0.3 * w, velocityX: -w / 0.15, tabWidth: w, count: 4), 0)
+        XCTAssertEqual(LiquidGlassMath.snapIndex(currentIdx: 3, dragPx: 2 * w, velocityX: 5 * w / 0.15, tabWidth: w, count: 4), 3)
+        XCTAssertEqual(LiquidGlassMath.snapIndex(currentIdx: 0, dragPx: -5 * w, velocityX: 0, tabWidth: w, count: 4), 0)
+        XCTAssertEqual(LiquidGlassMath.snapIndex(currentIdx: 2, dragPx: 10, velocityX: 100, tabWidth: 0, count: 4), 2)
+        XCTAssertEqual(LiquidGlassMath.alignment(currentIdx: 0, dragPx: -999, tabWidth: w, count: 4), -1)
+        XCTAssertEqual(LiquidGlassMath.alignment(currentIdx: 3, dragPx: 999, tabWidth: w, count: 4), 1)
+        XCTAssertEqual(LiquidGlassMath.bubbleOffset(alignment: -1, width: 400, count: 4), 0)
+        XCTAssertEqual(LiquidGlassMath.bubbleOffset(alignment: 1, width: 400, count: 4), 300)
+        let darkSignal = LiquidGlassMath.signal(rgbBytes: [10, 14, 26, 255])
+        let brightSignal = LiquidGlassMath.signal(rgbBytes: [250, 250, 250, 255])
+        XCTAssertEqual(darkSignal, 0)
+        XCTAssertEqual(brightSignal, 1)
+        XCTAssertEqual(LiquidGlassMath.smoothedVibrancy(previous: 0.5, signal: 1.0), 0.75)
+    }
 }

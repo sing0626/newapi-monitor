@@ -26,7 +26,11 @@ struct NewAPIMonitorApp: App {
 struct MonitorRootView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var systemScheme
 
+    private var theme: GlassTheme {
+        GlassTheme(mode: store.appearance.mode, accent: store.appearance.accent, scheme: systemScheme)
+    }
     private var scheme: ColorScheme? {
         switch store.appearance.mode {
         case "light": return .light
@@ -34,34 +38,34 @@ struct MonitorRootView: View {
         default: return nil
         }
     }
-    private var accent: Color {
-        switch store.appearance.accent {
-        case "blue": return .blue
-        case "green": return .green
-        case "orange": return .orange
-        default: return .purple
-        }
-    }
 
     var body: some View {
         ZStack {
-            TabView(selection: $store.selectedTab) {
-                HomeView().tabItem { Label("總覽", systemImage: "square.grid.2x2.fill") }.tag(0)
-                ReportsView().tabItem { Label("報表", systemImage: "chart.bar.xaxis") }.tag(1)
-                ProbeView().tabItem { Label("測速", systemImage: "speedometer") }.tag(2)
-                SettingsView().tabItem { Label("設定", systemImage: "gearshape.fill") }.tag(3)
+            theme.background.ignoresSafeArea()
+            Group {
+                switch store.selectedTab {
+                case 1: ReportsView()
+                case 2: ProbeView()
+                case 3: SettingsView()
+                default: HomeView()
+                }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if store.selectedTab != 0 || store.homeVisible {
+                    GlassBottomBar(selection: $store.selectedTab, active: store.canOperate)
+                }
             }
             if !store.isForeground || !store.isProtectedDataAvailable {
-                Color(uiColor: .systemBackground).ignoresSafeArea()
+                theme.background.ignoresSafeArea()
                 VStack(spacing: 16) {
-                    Image(systemName: "shield.lefthalf.filled").font(.largeTitle)
-                    Text("NewAPI Monitor").font(.title2.bold())
-                    Text("暫停連線・保護私隱").foregroundStyle(.secondary)
+                    BrandLogo(theme: theme, size: 52)
+                    Text("NewAPI Monitor").font(.title2.bold()).foregroundStyle(theme.text)
+                    Text("暫停連線・保護私隱").foregroundStyle(theme.muted)
                 }
                 .accessibilityElement(children: .combine)
             }
         }
-        .tint(accent)
+        .tint(theme.accent1)
         .preferredColorScheme(scheme)
         .onAppear { updateLifecycle() }
         .onChange(of: scenePhase) { _, _ in updateLifecycle() }
