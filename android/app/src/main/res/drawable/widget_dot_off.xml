@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 狀態燈：未設定／離線（灰） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="#FF575F76" />
+    <stroke android:width="2dp" android:color="#2D575F76" />
+</shape>

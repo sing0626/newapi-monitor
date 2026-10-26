@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 近黑深底：對應網頁版 style.css 嘅 bg 色值 -->
+    <color name="app_bg">#FF070A14</color>
+</resources>

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NewAPI Monitor</string>
+    <string name="widget_description">即時顯示現用實例嘅剩餘額度同今日已用</string>
+</resources>

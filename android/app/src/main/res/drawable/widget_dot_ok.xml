@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 狀態燈：在線（綠，帶淺光暈 ring） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="#FF34D399" />
+    <stroke android:width="2dp" android:color="#3D34D399" />
+</shape>
