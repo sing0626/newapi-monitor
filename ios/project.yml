@@ -1,6 +1,6 @@
 name: NewAPIMonitor
 options:
-  bundleIdPrefix: com.newapimonitor
+  bundleIdPrefix: com.singnewapimonitor
   deploymentTarget:
     iOS: "17.0"
   xcodeVersion: "15.0"
@@ -25,7 +25,7 @@ targets:
       - path: NewAPIMonitor
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.newapimonitor.ios
+        PRODUCT_BUNDLE_IDENTIFIER: com.singnewapimonitor.ios
         PRODUCT_NAME: NewAPIMonitor
         INFOPLIST_FILE: NewAPIMonitor/Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: NewAPIMonitor/Resources/NewAPIMonitor.entitlements
@@ -49,7 +49,7 @@ targets:
       - target: NewAPIMonitor
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.newapimonitor.ios.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.singnewapimonitor.ios.tests
         GENERATE_INFOPLIST_FILE: "YES"
         CODE_SIGN_IDENTITY: ""
         CODE_SIGNING_REQUIRED: "NO"

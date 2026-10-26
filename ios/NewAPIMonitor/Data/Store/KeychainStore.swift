@@ -2,7 +2,7 @@ import Foundation
 import Security
 
 enum KeychainStore {
-    private static let service = "com.newapimonitor.ios.credentials"
+    private static let service = "com.singnewapimonitor.ios.credentials"
 
     enum StoreError: LocalizedError, Equatable {
         case status(OSStatus)
