@@ -5,7 +5,7 @@
 | 平台 | 技術棧 | 目前版本 | 系統要求 | 說明文件 |
 | :--- | :--- | :--- | :--- | :--- |
 | **Android** | Kotlin、Jetpack Compose、Material 3 | **1.5.0** (`versionCode 7`) | Android 8.0+ (API 26) | [README-ANDROID.md](README-ANDROID.md) |
-| **iOS / iPadOS** | Swift、SwiftUI、Swift Charts | **0.1.0** (`build 1`) | iOS 17.0+ | [README-IOS.md](README-IOS.md) |
+| **iOS / iPadOS** | Swift、SwiftUI、Liquid Glass | **1.5.0** (`build 7`) | iOS 17.0+ (iOS 26 SDK) | [README-IOS.md](README-IOS.md) |
 
 ---
 

@@ -4,7 +4,7 @@ Native Kotlin / Jetpack Compose Android lives under android/. Independent Swift 
 
 ## iOS build and test
 
-- iOS 0.1.0 (build 1), iOS 17+, XcodeGen; no third-party Swift packages.
+- iOS 1.5.0 (build 7), iOS 17+, XcodeGen; no third-party Swift packages.
 - On macOS with Xcode: bash ios/scripts/test-ios.sh, then bash ios/scripts/build-unsigned-ipa.sh.
 - On Windows: python ios/scripts/check-project.py checks resources only; Swift compilation and XCTest require macOS. Never claim an IPA was built without a successful Xcode run.
 - Generated Xcode projects, IPA files, and build directories are ignored. Unsigned IPA packaging needs no Apple account; installation on a stock device still requires signing.

@@ -1,4 +1,4 @@
-# NewAPI Monitor — iOS 0.1.0（build 1）
+# NewAPI Monitor — iOS 1.5.0（build 7）
 
 獨立原生 **Swift + SwiftUI** 首版，最低 **iOS / iPadOS 17.0**。Android 原始碼及版本不變。本版不使用 WebView、PWA、跨平台 UI 或第三方 Swift 套件。
 

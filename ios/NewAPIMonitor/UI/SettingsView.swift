@@ -59,7 +59,7 @@ struct SettingsView: View {
                     NavigationLink("警報記錄（\(store.history.count)/200）") { AlertHistoryView() }
                 }
                 Section("關於") {
-                    Text("NewAPI Monitor · iOS 首發 0.1.0")
+                    Text("NewAPI Monitor · iOS 1.5.0 (7)")
                     Text("原生 SwiftUI · HTTPS · 鑰匙圈憑證\nToken／渠道唯讀；唔聲稱具備 Android 版全部功能。")
                         .font(.footnote).foregroundStyle(.secondary)
                 }

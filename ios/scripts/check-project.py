@@ -39,7 +39,8 @@ def check():
     assert list((ROOT / "NewAPIMonitorTests").glob("*Tests.swift")), "Missing unit tests"
     project = (ROOT / "project.yml").read_text(encoding="utf-8")
     assert 'SWIFT_VERSION: "5.0"' in project
-    assert 'MARKETING_VERSION: "0.1.0"' in project
+    assert 'MARKETING_VERSION: "1.5.0"' in project
+    assert 'CURRENT_PROJECT_VERSION: "7"' in project
     print(f"PASS: {count} JSON resources, plists, entitlements, icon, app entry, {len(sources)} Swift source paths.")
     print("NOT VERIFIED: Swift types, linking, XCTest, simulator UI, device signing or installation.")
 
