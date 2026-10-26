@@ -41,27 +41,32 @@ struct MonitorRootView: View {
 
     var body: some View {
         ZStack {
-            theme.background.ignoresSafeArea()
-            Group {
-                switch store.selectedTab {
-                case 1: ReportsView()
-                case 2: ProbeView()
-                case 3: SettingsView()
-                default: HomeView()
-                }
+            TabView(selection: $store.selectedTab) {
+                HomeView()
+                    .tabItem { Label("總覽", systemImage: "square.grid.2x2.fill") }
+                    .tag(0)
+                ReportsView()
+                    .tabItem { Label("報表", systemImage: "chart.bar.xaxis") }
+                    .tag(1)
+                ProbeView()
+                    .tabItem { Label("測速", systemImage: "speedometer") }
+                    .tag(2)
+                SettingsView()
+                    .tabItem { Label("設定", systemImage: "slider.horizontal.3") }
+                    .tag(3)
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if store.selectedTab != 0 || store.homeVisible {
-                    GlassBottomBar(selection: $store.selectedTab, active: store.canOperate)
-                }
-            }
+            .sensoryFeedback(.selection, trigger: store.selectedTab)
+
             if !store.isForeground || !store.isProtectedDataAvailable {
-                theme.background.ignoresSafeArea()
+                LiquidGlassBackdrop(theme: theme)
                 VStack(spacing: 16) {
                     BrandLogo(theme: theme, size: 52)
                     Text("NewAPI Monitor").font(.title2.bold()).foregroundStyle(theme.text)
                     Text("暫停連線・保護私隱").foregroundStyle(theme.muted)
                 }
+                .padding(28)
+                .nativeLiquidGlassCard(cornerRadius: 24)
+                .padding(32)
                 .accessibilityElement(children: .combine)
             }
         }

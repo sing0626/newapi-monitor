@@ -5,7 +5,10 @@ struct HomeView: View {
     @Environment(\.colorScheme) private var systemScheme
     @State private var showAdd = false
     @State private var path: [String] = []
-    private var theme: GlassTheme { GlassTheme(mode: store.appearance.mode, accent: store.appearance.accent, scheme: systemScheme) }
+
+    private var theme: GlassTheme {
+        GlassTheme(mode: store.appearance.mode, accent: store.appearance.accent, scheme: systemScheme)
+    }
     private var refreshKey: String {
         "\(store.generation)-\(store.selectedTab)-\(store.homeVisible)-\(store.canOperate)-\(path.count)"
     }
@@ -16,46 +19,59 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if store.settings.demo { OfflineBanner() }
-                    if let failure = store.loadFailure {
-                        GlassCard(theme: theme) {
-                            Text("資料保護").font(.headline).foregroundStyle(theme.text)
-                            InlineError(text: failure)
-                            Button("重新讀取（不會覆蓋原資料）") { store.reload() }
+            ZStack {
+                LiquidGlassBackdrop(theme: theme)
+                ScrollView {
+                    NativeGlassContainer(spacing: 16) {
+                        VStack(alignment: .leading, spacing: 16) {
+                            if store.settings.demo { OfflineBanner() }
+                            if let failure = store.loadFailure {
+                                GlassCard(theme: theme) {
+                                    Text("資料保護").font(.headline).foregroundStyle(theme.text)
+                                    InlineError(text: failure)
+                                    Button("重新讀取（不會覆蓋原資料）") { store.reload() }
+                                }
+                            }
+                            heroCard
+                            quickActions
+                            HStack {
+                                Text("實例").font(.headline).foregroundStyle(theme.text)
+                                Spacer()
+                                Button(store.refreshing ? "更新中…" : "全部刷新") {
+                                    Task { await store.refreshHome() }
+                                }
+                                .font(.caption.bold())
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .nativeLiquidGlassCapsule(interactive: true)
+                                .disabled(!store.canRefreshHome || store.refreshing)
+                            }
+                            if store.sources.isEmpty {
+                                GlassCard(theme: theme) {
+                                    Text("仲未有實例").font(.headline).foregroundStyle(theme.text)
+                                    Text("加入 HTTPS 站點，或到設定開啟離線示範。")
+                                        .font(.subheadline)
+                                        .foregroundStyle(theme.muted)
+                                    Button("加入第一個實例") { showAdd = true }
+                                        .buttonStyle(.borderedProminent)
+                                        .disabled(store.loadFailure != nil)
+                                }
+                            }
+                            ForEach(store.sources) { instance in
+                                NavigationLink(value: instance.id) {
+                                    instanceCard(instance)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            Text("只喺前景首頁顯示時，每 \(store.settings.intervalSec) 秒刷新；同時最多讀取 3 個實例。唔提供背景監察。")
+                                .font(.footnote)
+                                .foregroundStyle(theme.muted)
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
                     }
-                    heroCard
-                    quickActions
-                    HStack {
-                        Text("實例").font(.headline).foregroundStyle(theme.text)
-                        Spacer()
-                        Button(store.refreshing ? "更新中…" : "全部刷新") { Task { await store.refreshHome() } }
-                            .font(.caption.bold())
-                            .disabled(!store.canRefreshHome || store.refreshing)
-                    }
-                    if store.sources.isEmpty {
-                        GlassCard(theme: theme) {
-                            Text("仲未有實例").font(.headline).foregroundStyle(theme.text)
-                            Text("加入 HTTPS 站點，或到設定開啟離線示範。").font(.subheadline).foregroundStyle(theme.muted)
-                            Button("加入第一個實例") { showAdd = true }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(store.loadFailure != nil)
-                        }
-                    }
-                    ForEach(store.sources) { instance in
-                        NavigationLink(value: instance.id) { instanceCard(instance) }
-                            .buttonStyle(.plain)
-                    }
-                    Text("只喺前景首頁顯示時，每 \(store.settings.intervalSec) 秒刷新；同時最多讀取 3 個實例。唔提供背景監察。")
-                        .font(.footnote)
-                        .foregroundStyle(theme.muted)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
             }
-            .background(theme.background.ignoresSafeArea())
             .navigationTitle("NewAPI Monitor")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -63,21 +79,30 @@ struct HomeView: View {
                         BrandLogo(theme: theme, size: 22)
                         Button { Task { await store.refreshHome() } } label: {
                             if store.refreshing { ProgressView() } else { Image(systemName: "arrow.clockwise") }
-                        }.accessibilityLabel("刷新總覽").disabled(!store.canRefreshHome)
+                        }
+                        .accessibilityLabel("刷新總覽")
+                        .disabled(!store.canRefreshHome)
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showAdd = true } label: { Image(systemName: "plus") }
-                        .accessibilityLabel("加入實例").disabled(store.loadFailure != nil || store.settings.demo)
+                        .accessibilityLabel("加入實例")
+                        .disabled(store.loadFailure != nil || store.settings.demo)
                 }
             }
-            .navigationDestination(for: String.self) { InstanceDetailView(instanceID: $0) }
+            .navigationDestination(for: String.self) {
+                InstanceDetailView(instanceID: $0)
+                    .toolbar(.hidden, for: .tabBar)
+            }
             .refreshable { await store.refreshHome() }
             .sheet(isPresented: $showAdd) { InstanceEditorView(instance: nil) }
         }
         .onAppear { store.homeVisible = path.isEmpty }
         .onDisappear { store.homeVisible = false; store.stopHomeRefresh() }
-        .onChange(of: path) { _, value in store.homeVisible = value.isEmpty; if !value.isEmpty { store.stopHomeRefresh() } }
+        .onChange(of: path) { _, value in
+            store.homeVisible = value.isEmpty
+            if !value.isEmpty { store.stopHomeRefresh() }
+        }
         .onChange(of: store.generation) { _, _ in path = [] }
         .task(id: refreshKey) {
             guard store.canRefreshHome, path.isEmpty else { return }
@@ -89,35 +114,45 @@ struct HomeView: View {
     }
 
     private var heroCard: some View {
-        GlassCard(theme: theme, padding: 0) {
+        GlassCard(theme: theme, padding: 20, cornerRadius: 24, tint: theme.accent1) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
                     Text("可用餘額合計").font(.subheadline).foregroundStyle(theme.secondaryText)
                     Spacer()
-                    Text("\(balances.count)/\(included.count) 實例 · USD").font(.caption).foregroundStyle(theme.accent2)
+                    Text("\(balances.count)/\(included.count) 實例 · USD")
+                        .font(.caption.bold())
+                        .foregroundStyle(theme.accent2)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .nativeLiquidGlassCapsule()
                 }
                 Text(store.money(balances.isEmpty ? nil : balances.reduce(0, +)))
-                    .font(.system(size: 34, weight: .bold).monospacedDigit())
+                    .font(.system(size: 36, weight: .bold, design: .rounded).monospacedDigit())
                     .foregroundStyle(theme.text)
+                    .contentTransition(.numericText())
                     .minimumScaleFactor(0.6)
-                Divider().overlay(theme.stroke)
+                Divider()
                 HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("今日消費").font(.caption).foregroundStyle(theme.muted)
-                        Text(store.money(todays.isEmpty ? nil : todays.reduce(0, +))).font(.headline.monospacedDigit()).foregroundStyle(theme.text)
+                        Text(store.money(todays.isEmpty ? nil : todays.reduce(0, +)))
+                            .font(.headline.monospacedDigit())
+                            .foregroundStyle(theme.text)
+                            .contentTransition(.numericText())
                     }
                     Spacer()
                     VStack(alignment: .leading, spacing: 4) {
                         Text("本月消費").font(.caption).foregroundStyle(theme.muted)
-                        Text(store.money(months.isEmpty ? nil : months.reduce(0, +))).font(.headline.monospacedDigit()).foregroundStyle(theme.text)
+                        Text(store.money(months.isEmpty ? nil : months.reduce(0, +)))
+                            .font(.headline.monospacedDigit())
+                            .foregroundStyle(theme.text)
+                            .contentTransition(.numericText())
                     }
                 }
                 Text("部分資料不等於完整總額；排除嘅實例仍會顯示及檢查警報。")
-                    .font(.caption2).foregroundStyle(theme.muted)
+                    .font(.caption2)
+                    .foregroundStyle(theme.muted)
             }
-            .padding(20)
-            .background(LinearGradient(colors: [theme.accent1.opacity(0.22), theme.accent2.opacity(0.05)],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing))
         }
     }
 
@@ -131,20 +166,35 @@ struct HomeView: View {
 
     private func quickButton(_ label: String, icon: String, tab: Int) -> some View {
         Button { store.selectedTab = tab } label: {
-            GlassCard(theme: theme, padding: 12) {
+            GlassCard(theme: theme, padding: 12, cornerRadius: 18, interactive: true) {
                 VStack(spacing: 8) {
-                    Image(systemName: icon).font(.headline).foregroundStyle(theme.accent1)
-                    Text(label).font(.caption.bold()).foregroundStyle(theme.secondaryText).lineLimit(1)
-                }.frame(maxWidth: .infinity)
+                    Image(systemName: icon)
+                        .font(.headline)
+                        .foregroundStyle(theme.accent1)
+                        .symbolEffect(.bounce, value: store.selectedTab == tab)
+                    Text(label)
+                        .font(.caption.bold())
+                        .foregroundStyle(theme.secondaryText)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity)
             }
-        }.buttonStyle(.plain)
+        }
+        .buttonStyle(.plain)
     }
 
     private func instanceCard(_ instance: Instance) -> some View {
         let snapshot = store.snapshots[instance.id]
-        return GlassCard(theme: theme) {
-            HStack {
-                if store.preferences.pinned.contains(instance.id) { Image(systemName: "pin.fill").foregroundStyle(.orange) }
+        let nowMs = AppStore.now
+        let fresh = snapshot?.balanceFresh(nowMs: nowMs) == true
+        let statusColor: Color = fresh ? GlassTheme.okGreen : (snapshot?.balanceFailure != nil ? GlassTheme.errRed : GlassTheme.warnAmber)
+
+        return GlassCard(theme: theme, cornerRadius: 20, interactive: true) {
+            HStack(spacing: 8) {
+                StatusDot(color: statusColor)
+                if store.preferences.pinned.contains(instance.id) {
+                    Image(systemName: "pin.fill").foregroundStyle(.orange)
+                }
                 Text(instance.name).font(.headline).foregroundStyle(theme.text)
                 Spacer()
                 Text("詳情 ›").font(.caption.bold()).foregroundStyle(theme.accent1)
@@ -155,7 +205,9 @@ struct HomeView: View {
             if let budget = store.budgets[instance.id] {
                 MoneyRow(title: "每月預算", value: store.money(budget))
                 if let spent = snapshot?.monthUsd, !store.preferences.hideMoney {
-                    ProgressView(value: min(max(spent / budget, 0), 1)).accessibilityLabel("預算使用比例")
+                    ProgressView(value: min(max(spent / budget, 0), 1))
+                        .tint(spent / budget >= 0.9 ? GlassTheme.warnAmber : theme.accent1)
+                        .accessibilityLabel("預算使用比例")
                 }
             }
             if store.preferences.excluded.contains(instance.id) {
@@ -163,7 +215,8 @@ struct HomeView: View {
             }
             InlineError(text: store.failures[instance.id] ?? snapshot?.balanceFailure ?? snapshot?.spendFailure)
             Text(snapshot.map { "最近更新：\(Fmt.relativeTime(fromMs: $0.attemptedAt))" } ?? "尚未讀取")
-                .font(.caption).foregroundStyle(theme.muted)
+                .font(.caption)
+                .foregroundStyle(theme.muted)
         }
     }
 }
