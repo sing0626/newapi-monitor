@@ -2,7 +2,7 @@
 
 獨立原生 **Swift + SwiftUI** 首版，最低 **iOS / iPadOS 17.0**。Android 原始碼及版本不變。本版不使用 WebView、PWA、跨平台 UI 或第三方 Swift 套件。
 
-> **驗證狀態：目前開發主機為 Windows，未安裝 Xcode。已做資源／配置／語法層靜態檢查，但未完成 Apple SDK 型別檢查、連結、XCTest 執行、模擬器 UI 或真機驗證。尚未產生可下載 IPA，不能把本目錄視為已通過編譯的發佈版本。**
+> **驗證狀態：已透過 GitHub Actions `macos-15`（Xcode 16.4 / iPhoneOS 18.5 SDK）完成模擬器 XCTest（5 個測試套件／41 項測試全部通過）及真機 `arm64` Release 免簽名打包，產出 `NewAPIMonitor-unsigned.ipa`。真機安裝仍需使用 Sideloadly / SideStore 等工具配合個人免費 Apple ID 自簽名。**
 
 ## 已實作的首版範圍
 
@@ -47,15 +47,14 @@
 
 警報**只在前景首頁刷新時檢查**，不是持續背景監控；iOS 不保證 Android WorkManager 式固定間隔。重啟 App 不保留首頁金額快照／測速結果；需要重新讀取。沒有聲稱側載可免簽名永久運行。
 
-## Windows：用 GitHub Actions 編譯
+## Windows：用 GitHub Actions 編譯與下載 IPA
 
-本機不需要 Mac，但執行編譯的機器仍須是有 Xcode 的 macOS。配置已放在 [`.github/workflows/build-ios.yml`](.github/workflows/build-ios.yml)，本次工作**沒有推送程式碼或觸發雲端執行**。
+本機不需要 Mac，編譯由 GitHub Actions `macos-15`（Xcode 16.4）自動執行，配置位於 [`.github/workflows/build-ios.yml`](.github/workflows/build-ios.yml)。
 
-1. 自行把程式碼推送至你控制的 GitHub repository（建議 private；程式碼上傳會離開本機）。
-2. 到 **Actions → Build iOS unsigned IPA → Run workflow**。也會在涉及 `ios/` 的 push／pull request 執行。
-3. macOS runner 安裝 XcodeGen，檢查資源，跑模擬器 XCTest，全部成功後才編譯真機 `iphoneos` Release 包。
-4. 成功後在該次執行的 **Artifacts** 下載 `NewAPIMonitor-iOS-unsigned`。ZIP 裡的 `NewAPIMonitor-unsigned.ipa` 才是側載輸入；不支援直接安裝 artifact ZIP。
-5. XCTest 或編譯失敗時不會上傳舊 IPA；`iOS-test-results` artifact 供檢查 `.xcresult`（若測試有產生）。
+1. 前往 [GitHub Actions — Build iOS unsigned IPA](https://github.com/sing0626/newapi-monitor/actions/workflows/build-ios.yml)。
+2. 點選最新成功嘅 Run，喺頁面底部 **Artifacts** 下載 `NewAPIMonitor-iOS-unsigned`。
+3. 解壓下載嘅 ZIP，入面嘅 `NewAPIMonitor-unsigned.ipa` 就係側載輸入檔（唔可以直接安裝外層 Artifact ZIP）。
+4. 如修改咗 `ios/` 程式碼並 Push，或者手動點選 **Run workflow**，macOS runner 會自動安裝 XcodeGen、檢查資源、跑晒 41 個模擬器 XCTest，全部通過後先會編譯並上傳新嘅真機 `iphoneos` Release IPA。
 
 此流程**不需要 Apple ID、Apple Developer Program、簽名憑證、Provisioning Profile 或 Apple Secrets**，亦不會發佈 App Store／TestFlight。GitHub runner 的免費額度及超額收費取決於 repository 和帳戶計劃，不保證無限免費。
 
