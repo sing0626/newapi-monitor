@@ -12,7 +12,7 @@ on:
       - '.github/workflows/build-ios.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ios-${{ github.workflow }}-${{ github.ref }}
@@ -48,6 +48,17 @@ jobs:
           path: ${{ steps.package.outputs.ipa_path }}
           if-no-files-found: error
           retention-days: 14
+      - name: Publish unsigned IPA to GitHub Release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IPA_PATH: ${{ steps.package.outputs.ipa_path }}
+        run: |
+          if gh release view v1.5.0 >/dev/null 2>&1; then
+            gh release upload v1.5.0 "$IPA_PATH#NewAPIMonitor-unsigned.ipa" --clobber
+          else
+            gh release create v1.5.0 "$IPA_PATH#NewAPIMonitor-unsigned.ipa" --title "NewAPI Monitor v1.5.0" --generate-notes
+          fi
       - name: Upload simulator test results
         if: always()
         uses: actions/upload-artifact@v4
